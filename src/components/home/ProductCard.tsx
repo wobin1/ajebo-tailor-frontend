@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Product } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 
 interface ProductCardProps {
@@ -13,13 +14,34 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const { user } = useAuth();
   const { addItem } = useCart();
 
-  const handleAddToCart = (e: React.MouseEvent) => {
+  const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Add with default size and color - in real app, this would open a modal
-    addItem(product, product.sizes[0] || 'M', product.colors[0] || 'Black', 1);
+    
+    if (!user) {
+      // Redirect to login or show login modal
+      alert('Please log in to add items to cart');
+      return;
+    }
+
+    try {
+      setIsAddingToCart(true);
+      
+      await addItem(product, 'M', 'Black', 1); // Default size and color
+      
+      // Show success message or update UI
+      console.log('Product added to cart successfully');
+      
+    } catch (error) {
+      console.error('Failed to add product to cart:', error);
+      alert('Failed to add product to cart. Please try again.');
+    } finally {
+      setIsAddingToCart(false);
+    }
   };
 
   const discountPercentage = product.originalPrice 
@@ -70,10 +92,11 @@ export function ProductCard({ product }: ProductCardProps) {
           <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button
               onClick={handleAddToCart}
-              className="w-full bg-black text-white hover:bg-gray-900 text-sm"
+              disabled={isAddingToCart}
+              className="w-full bg-black text-white hover:bg-gray-900 text-sm disabled:opacity-50"
               size="sm"
             >
-              Quick Add
+              {isAddingToCart ? 'Adding...' : 'Quick Add'}
             </Button>
           </div>
         </div>
@@ -90,11 +113,11 @@ export function ProductCard({ product }: ProductCardProps) {
 
           <div className="flex items-center space-x-2">
             <span className="text-lg font-semibold text-gray-900">
-              ${product.price.toFixed(2)}
+              ${Number(product.price).toFixed(2)}
             </span>
             {product.originalPrice && (
               <span className="text-sm text-gray-500 line-through">
-                ${product.originalPrice.toFixed(2)}
+                ${Number(product.originalPrice).toFixed(2)}
               </span>
             )}
           </div>

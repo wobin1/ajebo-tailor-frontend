@@ -11,23 +11,15 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import { useCreateOrder } from '@/hooks/useOrders';
+import { useCart } from '@/context/CartContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createOrder } from '@/services/orderApi';
+import { addressApi } from '@/services/addressApi';
+import { AddressSelector } from '@/components/address/AddressSelector';
+import { toast } from 'sonner';
 
 const checkoutSchema = z.object({
-  // Shipping Information
-  firstName: z.string().min(2, 'First name is required'),
-  lastName: z.string().min(2, 'Last name is required'),
-  email: z.string().email('Invalid email address'),
-  phone: z.string().min(10, 'Phone number is required'),
-  address1: z.string().min(5, 'Address is required'),
-  address2: z.string().optional(),
-  city: z.string().min(2, 'City is required'),
-  state: z.string().min(2, 'State is required'),
-  zipCode: z.string().min(5, 'ZIP code is required'),
-  country: z.string().min(2, 'Country is required'),
-  
   // Payment Information
   cardNumber: z.string().min(16, 'Card number is required'),
   expiryDate: z.string().min(5, 'Expiry date is required'),
@@ -39,10 +31,22 @@ type CheckoutFormData = z.infer<typeof checkoutSchema>;
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, total, clearCart } = useCart();
   const { user } = useAuth();
-  const createOrderMutation = useCreateOrder();
+  const { items, total } = useCart();
+  const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedShippingAddressId, setSelectedShippingAddressId] = useState<string>('');
+  const [selectedBillingAddressId, setSelectedBillingAddressId] = useState<string>('');
+
+  // Fetch user addresses
+  const { data: addresses = [], refetch: refetchAddresses } = useQuery({
+    queryKey: ['addresses'],
+    queryFn: addressApi.getUserAddresses,
+    enabled: !!user,
+    refetchOnWindowFocus: false,
+  });
+
+  const subtotal = total;
 
   const {
     register,
@@ -50,25 +54,17 @@ export default function CheckoutPage() {
     formState: { errors },
   } = useForm<CheckoutFormData>({
     resolver: zodResolver(checkoutSchema),
-    defaultValues: {
-      firstName: user?.name?.split(' ')[0] || '',
-      lastName: user?.name?.split(' ')[1] || '',
-      email: user?.email || '',
-      country: 'United States',
-    },
   });
 
-  // Redirect if cart is empty
-  if (items.length === 0) {
+
+  if (!items.length) {
     return (
       <MainLayout>
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Your cart is empty</h1>
             <p className="text-gray-600 mb-8">Add some items to your cart before checking out.</p>
-            <Button onClick={() => router.push('/products/all')}>
-              Continue Shopping
-            </Button>
+            <Button onClick={() => router.push('/products')}>Continue Shopping</Button>
           </div>
         </div>
       </MainLayout>
@@ -83,47 +79,80 @@ export default function CheckoutPage() {
 
     setIsProcessing(true);
     try {
+      // Create a dummy address if none exists
+      let shippingAddressId = selectedShippingAddressId;
+      
+      if (!shippingAddressId && addresses.length === 0) {
+        // Create dummy address for testing
+        const dummyAddress = {
+          first_name: 'Test',
+          last_name: 'User',
+          address1: '123 Test Street',
+          city: 'Test City',
+          state: 'Test State',
+          zip_code: '12345',
+          country: 'United States',
+          address_type: 'shipping' as const,
+          is_default: true
+        };
+        
+        try {
+          const createdAddress = await addressApi.createAddress(dummyAddress);
+          shippingAddressId = createdAddress.id;
+        } catch (error) {
+          console.error('Failed to create dummy address:', error);
+          toast.error('Failed to create address. Please try again.');
+          return;
+        }
+      } else if (!shippingAddressId && addresses.length > 0) {
+        // Use the first available address
+        shippingAddressId = addresses[0].id;
+      }
+
       const orderData = {
-        userId: user.id,
         items: items.map(item => ({
-          id: `${item.product.id}-${item.size}-${item.color}`,
-          product: item.product,
+          product_id: item.productId,
+          quantity: item.quantity,
           size: item.size,
           color: item.color,
-          quantity: item.quantity,
+          customizations: {},
         })),
-        total: total + 10, // Add shipping
-        status: 'pending' as const,
-        shippingAddress: {
-          firstName: data.firstName,
-          lastName: data.lastName,
-          company: '',
-          address1: data.address1,
-          address2: data.address2 || '',
-          city: data.city,
-          state: data.state,
-          zipCode: data.zipCode,
-          country: data.country,
-          phone: data.phone,
-        },
-        paymentMethod: {
-          type: 'card',
-          last4: data.cardNumber.slice(-4),
-        },
+        shipping_address_id: shippingAddressId,
+        billing_address_id: selectedBillingAddressId || shippingAddressId,
+        payment_method: 'card'
       };
 
-      const order = await createOrderMutation.mutateAsync(orderData);
-      clearCart();
-      router.push(`/orders/${order.id}?success=true`);
+      const response = await createOrder(orderData);
+      
+      // Clear cart after successful order
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+      
+      toast.success('Order created successfully!');
+      router.push(`/orders/${response.data.id}?success=true`);
     } catch (error) {
       console.error('Checkout failed:', error);
-      alert('Checkout failed. Please try again.');
+      
+      // More specific error handling
+      let errorMessage = 'Checkout failed. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('401') || error.message.includes('unauthorized')) {
+          errorMessage = 'Please log in again to complete your order.';
+          router.push('/auth/login?redirect=/checkout');
+          return;
+        } else if (error.message.includes('400')) {
+          errorMessage = 'Please check your information and try again.';
+        } else if (error.message.includes('500')) {
+          errorMessage = 'Server error. Please try again in a few minutes.';
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const subtotal = total;
   const shipping = 10;
   const tax = 0;
   const finalTotal = subtotal + shipping + tax;
@@ -152,143 +181,63 @@ export default function CheckoutPage() {
           {/* Checkout Form */}
           <div className="space-y-8">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-              {/* Shipping Information */}
+              {/* Shipping Address */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <Truck className="h-5 w-5" />
-                    <span>Shipping Information</span>
+                    <span>Shipping Address</span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        First Name *
-                      </label>
-                      <Input
-                        {...register('firstName')}
-                        className={errors.firstName ? 'border-red-500' : ''}
-                      />
-                      {errors.firstName && (
-                        <p className="mt-1 text-sm text-red-600">{errors.firstName.message}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Last Name *
-                      </label>
-                      <Input
-                        {...register('lastName')}
-                        className={errors.lastName ? 'border-red-500' : ''}
-                      />
-                      {errors.lastName && (
-                        <p className="mt-1 text-sm text-red-600">{errors.lastName.message}</p>
-                      )}
-                    </div>
-                  </div>
+                <CardContent>
+                  <AddressSelector
+                    addresses={addresses}
+                    selectedAddressId={selectedShippingAddressId}
+                    onAddressSelect={setSelectedShippingAddressId}
+                    onAddressesChange={refetchAddresses}
+                    title="Select Shipping Address"
+                    addressType="shipping"
+                  />
+                </CardContent>
+              </Card>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email Address *
+              {/* Billing Address */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <CreditCard className="h-5 w-5" />
+                    <span>Billing Address</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={!selectedBillingAddressId || selectedBillingAddressId === selectedShippingAddressId}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedBillingAddressId(selectedShippingAddressId);
+                          } else {
+                            setSelectedBillingAddressId('');
+                          }
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="text-sm text-gray-700">Same as shipping address</span>
                     </label>
-                    <Input
-                      type="email"
-                      {...register('email')}
-                      className={errors.email ? 'border-red-500' : ''}
+                  </div>
+                  
+                  {selectedBillingAddressId !== selectedShippingAddressId && (
+                    <AddressSelector
+                      addresses={addresses}
+                      selectedAddressId={selectedBillingAddressId}
+                      onAddressSelect={setSelectedBillingAddressId}
+                      onAddressesChange={refetchAddresses}
+                      title="Select Billing Address"
+                      addressType="billing"
                     />
-                    {errors.email && (
-                      <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Phone Number *
-                    </label>
-                    <Input
-                      type="tel"
-                      {...register('phone')}
-                      className={errors.phone ? 'border-red-500' : ''}
-                    />
-                    {errors.phone && (
-                      <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Address *
-                    </label>
-                    <Input
-                      {...register('address1')}
-                      className={errors.address1 ? 'border-red-500' : ''}
-                    />
-                    {errors.address1 && (
-                      <p className="mt-1 text-sm text-red-600">{errors.address1.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Apartment, suite, etc. (optional)
-                    </label>
-                    <Input {...register('address2')} />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        City *
-                      </label>
-                      <Input
-                        {...register('city')}
-                        className={errors.city ? 'border-red-500' : ''}
-                      />
-                      {errors.city && (
-                        <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        State *
-                      </label>
-                      <Input
-                        {...register('state')}
-                        className={errors.state ? 'border-red-500' : ''}
-                      />
-                      {errors.state && (
-                        <p className="mt-1 text-sm text-red-600">{errors.state.message}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        ZIP Code *
-                      </label>
-                      <Input
-                        {...register('zipCode')}
-                        className={errors.zipCode ? 'border-red-500' : ''}
-                      />
-                      {errors.zipCode && (
-                        <p className="mt-1 text-sm text-red-600">{errors.zipCode.message}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Country *
-                    </label>
-                    <select
-                      {...register('country')}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="United States">United States</option>
-                      <option value="Canada">Canada</option>
-                      <option value="United Kingdom">United Kingdom</option>
-                      <option value="Australia">Australia</option>
-                    </select>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -367,6 +316,70 @@ export default function CheckoutPage() {
               >
                 {isProcessing ? 'Processing...' : `Complete Order - $${finalTotal.toFixed(2)}`}
               </Button>
+              
+              {/* Quick Order Button with Dummy Data */}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-12 text-lg font-medium"
+                disabled={isProcessing}
+                onClick={async () => {
+                  if (!user) {
+                    router.push('/auth/login?redirect=/checkout');
+                    return;
+                  }
+                  
+                  setIsProcessing(true);
+                  try {
+                    // Create dummy address if none exists
+                    let addressId: string;
+                    
+                    if (addresses.length > 0) {
+                      addressId = addresses[0].id;
+                    } else {
+                      const dummyAddress = {
+                        first_name: 'Test',
+                        last_name: 'User',
+                        address1: '123 Test Street',
+                        city: 'Test City',
+                        state: 'Test State',
+                        zip_code: '12345',
+                        country: 'United States',
+                        address_type: 'shipping' as const,
+                        is_default: true
+                      };
+                      
+                      const createdAddress = await addressApi.createAddress(dummyAddress);
+                      addressId = createdAddress.id;
+                    }
+                    
+                    const orderData = {
+                      items: items.map(item => ({
+                        product_id: item.productId,
+                        quantity: item.quantity,
+                        size: item.size,
+                        color: item.color,
+                        customizations: {},
+                      })),
+                      shipping_address_id: addressId,
+                      billing_address_id: addressId,
+                      payment_method: 'card'
+                    };
+                    
+                    const response = await createOrder(orderData);
+                    queryClient.invalidateQueries({ queryKey: ['cart'] });
+                    toast.success('Order created successfully!');
+                    router.push(`/orders/${response.data.id}?success=true`);
+                  } catch (error) {
+                    console.error('Quick order failed:', error);
+                    toast.error('Order creation failed. Please try again.');
+                  } finally {
+                    setIsProcessing(false);
+                  }
+                }}
+              >
+                {isProcessing ? 'Processing...' : 'Quick Order (Dummy Data)'}
+              </Button>
             </form>
           </div>
 
@@ -382,7 +395,7 @@ export default function CheckoutPage() {
                   {items.map((item) => (
                     <div key={item.id} className="flex space-x-3">
                       <div className="flex-shrink-0 w-16 h-16 bg-gray-100 rounded-lg overflow-hidden">
-                        {item.product.images[0] && (
+                        {item.product.images && item.product.images.length > 0 ? (
                           <Image
                             src={item.product.images[0]}
                             alt={item.product.name}
@@ -390,6 +403,10 @@ export default function CheckoutPage() {
                             height={64}
                             className="w-full h-full object-cover"
                           />
+                        ) : (
+                          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                            <span className="text-gray-400 text-xs">No Image</span>
+                          </div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -400,7 +417,7 @@ export default function CheckoutPage() {
                           {item.size} • {item.color} • Qty: {item.quantity}
                         </p>
                         <p className="text-sm font-medium text-gray-900">
-                          ${(item.product.price * item.quantity).toFixed(2)}
+                          ${(Number(item.product.price) * item.quantity).toFixed(2)}
                         </p>
                       </div>
                     </div>

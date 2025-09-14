@@ -1,8 +1,86 @@
 import { Product, Category, Order, User } from '@/types';
 import { mockProducts, mockCategories, mockOrders, mockUsers } from '@/lib/mockData';
+import { authApi } from './authApi';
 
-// Simulate API delay
+// API Configuration
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_V1_PREFIX = '/api/v1';
+
+// Simulate API delay for mock endpoints
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// HTTP Client for authenticated requests
+class AuthenticatedApiClient {
+  private baseURL: string;
+
+  constructor() {
+    this.baseURL = `${API_BASE_URL}${API_V1_PREFIX}`;
+  }
+
+  async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+    const accessToken = authApi.getCurrentUserData() ? 
+      localStorage.getItem('ajebo_access_token') : null;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+
+    const config: RequestInit = {
+      ...options,
+      headers,
+    };
+
+    const response = await fetch(url, config);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Token might be expired, try to refresh
+        const refreshed = await authApi.refreshAccessToken();
+        if (refreshed) {
+          // Retry with new token
+          const newHeaders = {
+            ...headers,
+            Authorization: `Bearer ${refreshed.access_token}`
+          };
+          const retryResponse = await fetch(url, { ...config, headers: newHeaders });
+          if (retryResponse.ok) {
+            return retryResponse.json();
+          }
+        }
+        throw new Error('Authentication required');
+      }
+      throw new Error(`API Error: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // User profile endpoints
+  async getUserProfile(): Promise<User> {
+    return this.request<User>('/users/profile');
+  }
+
+  async updateUserProfile(userData: Partial<User>): Promise<User> {
+    return this.request<User>('/users/profile', {
+      method: 'PUT',
+      body: JSON.stringify(userData),
+    });
+  }
+}
+
+const apiClient = new AuthenticatedApiClient();
+
+// Export the authenticated API client for use in other parts of the app
+export { apiClient };
 
 // Product API
 export const productApi = {
@@ -219,7 +297,11 @@ export const userApi = {
       id: Date.now().toString(),
       email,
       name,
-      role: 'customer'
+      role: 'customer',
+      is_active: true,
+      email_verified: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
     
     mockUsers.push(newUser);

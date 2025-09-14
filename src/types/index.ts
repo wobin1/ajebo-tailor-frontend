@@ -4,6 +4,10 @@ export interface User {
   name: string;
   avatar?: string;
   role: 'customer' | 'admin' | 'designer';
+  is_active: boolean;
+  email_verified: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Product {

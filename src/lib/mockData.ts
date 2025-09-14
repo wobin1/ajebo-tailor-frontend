@@ -302,13 +302,21 @@ export const mockUsers: User[] = [
     email: 'john.doe@example.com',
     name: 'John Doe',
     role: 'customer',
-    avatar: '/images/avatar-1.jpg'
+    avatar: '/images/avatar-1.jpg',
+    is_active: true,
+    email_verified: true,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z'
   },
   {
     id: '2',
     email: 'admin@ajebotailor.com',
     name: 'Admin User',
     role: 'admin',
-    avatar: '/images/avatar-admin.jpg'
+    avatar: '/images/avatar-admin.jpg',
+    is_active: true,
+    email_verified: true,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z'
   }
 ];

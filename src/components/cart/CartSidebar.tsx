@@ -3,17 +3,85 @@
 import React from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { X, Plus, Minus, ShoppingBag } from 'lucide-react';
+import { X, Plus, Minus, ShoppingBag, Loader2 } from 'lucide-react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/context/CartContext';
+import { createOrder } from '@/services/orderApi';
+import { addressApi } from '@/services/addressApi';
+import { useAuth } from '@/context/AuthContext';
 
 export function CartSidebar() {
-  const { items, total, itemCount, isOpen, closeCart, updateQuantity, removeItem } = useCart();
+  const { isOpen, closeCart, updateQuantity, removeItem, items, total, itemCount } = useCart();
+  const { user } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  // Use cart data from CartContext instead of API query
+  // This provides immediate access to cart state without API dependency
+
+  // Fetch user addresses for quick checkout
+  const { data: addresses = [] } = useQuery({
+    queryKey: ['addresses'],
+    queryFn: addressApi.getUserAddresses,
+    enabled: !!user,
+    refetchOnWindowFocus: false,
+  });
+
+  // Mutation for creating order
+  const createOrderMutation = useMutation({
+    mutationFn: createOrder,
+    onSuccess: (data) => {
+      // Clear cart and redirect to order success page
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+      closeCart();
+      router.push(`/orders/${data.data.id}?success=true`);
+    },
+    onError: (error) => {
+      console.error('Order creation failed:', error);
+      // Fall back to checkout page where user can select/add addresses
+      closeCart();
+      router.push('/checkout');
+    },
+  });
 
   const handleCheckout = () => {
-    closeCart();
-    router.push('/checkout');
+    if (items.length === 0) {
+      return;
+    }
+
+    // If user is not authenticated, redirect to login
+    if (!user) {
+      closeCart();
+      router.push('/auth/login?redirect=/checkout');
+      return;
+    }
+
+    // Check if user has a default address for quick checkout
+    const defaultAddress = addresses.find(addr => addr.is_default);
+    
+    if (!defaultAddress) {
+      // No default address found, redirect to full checkout page
+      closeCart();
+      router.push('/checkout');
+      return;
+    }
+
+    // Create order using default address ID
+    const orderData = {
+      items: items.map(item => ({
+        product_id: item.productId,
+        quantity: item.quantity,
+        size: item.size,
+        color: item.color,
+        customizations: {},
+      })),
+      shipping_address_id: defaultAddress.id,
+      billing_address_id: defaultAddress.id, // Use same address for billing
+      payment_method: 'card'
+    };
+
+    createOrderMutation.mutate(orderData);
   };
 
   if (!isOpen) return null;
@@ -44,7 +112,7 @@ export function CartSidebar() {
                 <div key={item.id} className="flex space-x-4">
                   {/* Product Image */}
                   <div className="flex-shrink-0 w-20 h-20 bg-gray-100 rounded-lg overflow-hidden">
-                    {item.product.images[0] ? (
+                    {item.product.images && item.product.images.length > 0 ? (
                       <Image
                         src={item.product.images[0]}
                         alt={item.product.name}
@@ -68,7 +136,7 @@ export function CartSidebar() {
                       {item.size} • {item.color}
                     </p>
                     <p className="text-sm font-semibold text-gray-900 mt-1">
-                      ${item.product.price.toFixed(2)}
+                      ${Number(item.product.price).toFixed(2)}
                     </p>
 
                     {/* Quantity Controls */}
@@ -118,15 +186,28 @@ export function CartSidebar() {
             <Button 
               className="w-full bg-black text-white hover:bg-gray-900"
               onClick={handleCheckout}
+              disabled={createOrderMutation.isPending}
             >
-              Checkout
+              {createOrderMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating Order...
+                </>
+              ) : addresses.find(addr => addr.is_default) ? (
+                'Quick Checkout'
+              ) : (
+                'Checkout'
+              )}
             </Button>
             <Button 
               variant="outline" 
               className="w-full"
-              onClick={closeCart}
+              onClick={() => {
+                closeCart();
+                router.push('/checkout');
+              }}
             >
-              Continue Shopping
+              {addresses.find(addr => addr.is_default) ? 'Full Checkout' : 'Go to Checkout'}
             </Button>
           </div>
         )}

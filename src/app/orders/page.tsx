@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useOrders } from '@/hooks/useOrders';
 import { useAuth } from '@/context/AuthContext';
-import { Order } from '@/types';
+import { Order } from '@/services/orderApi';
 
 const statusConfig = {
   pending: { icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Pending' },
+  confirmed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Confirmed' },
   processing: { icon: Package, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Processing' },
   shipped: { icon: Truck, color: 'text-purple-600', bg: 'bg-purple-100', label: 'Shipped' },
   delivered: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Delivered' },
@@ -24,12 +25,12 @@ export default function OrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const { data: orders = [], isLoading, error } = useOrders(user?.id);
+  const { data: orders = [], isLoading, error } = useOrders();
 
   // Filter orders based on search and status
   const filteredOrders = orders.filter((order: Order) => {
     const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.items.some(item => item.product.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (order.items && order.items.some(item => item.product_name.toLowerCase().includes(searchTerm.toLowerCase())));
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -84,6 +85,7 @@ export default function OrdersPage() {
               >
                 <option value="all">All Orders</option>
                 <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
                 <option value="processing">Processing</option>
                 <option value="shipped">Shipped</option>
                 <option value="delivered">Delivered</option>
@@ -174,7 +176,7 @@ export default function OrdersPage() {
                         Order #{order.id}
                       </h3>
                       <p className="text-sm text-gray-600">
-                        Placed on {new Date(order.createdAt).toLocaleDateString()}
+                        Placed on {new Date(order.created_at).toLocaleDateString()}
                       </p>
                     </div>
                     
@@ -189,18 +191,22 @@ export default function OrdersPage() {
                   <div className="flex justify-between items-end">
                     <div className="flex-1">
                       <p className="text-sm text-gray-600 mb-2">
-                        {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                        {order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? 's' : ''}
                       </p>
                       <div className="flex space-x-2">
-                        {order.items.slice(0, 3).map((item, index) => (
+                        {order.items?.slice(0, 3).map((item, index) => (
                           <div key={index} className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                            {item.product.name}
+                            {item.product_name}
                             {item.quantity > 1 && ` (${item.quantity})`}
                           </div>
-                        ))}
-                        {order.items.length > 3 && (
+                        )) || (
                           <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                            +{order.items.length - 3} more
+                            No items
+                          </div>
+                        )}
+                        {(order.items?.length || 0) > 3 && (
+                          <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                            +{(order.items?.length || 0) - 3} more
                           </div>
                         )}
                       </div>
@@ -208,7 +214,7 @@ export default function OrdersPage() {
                     
                     <div className="text-right">
                       <p className="text-lg font-semibold text-gray-900">
-                        ${order.total.toFixed(2)}
+                        ${(order.total_amount || 0).toFixed(2)}
                       </p>
                       <Button
                         variant="outline"

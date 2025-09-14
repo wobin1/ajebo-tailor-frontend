@@ -13,7 +13,10 @@ import { useAuth } from '@/context/AuthContext';
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string()
+    .min(6, 'Password must be at least 6 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one digit'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -119,6 +122,9 @@ export default function SignupPage() {
             {errors.password && (
               <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
             )}
+            <p className="mt-1 text-xs text-gray-500">
+              Password must be at least 6 characters, contain one uppercase letter and one digit
+            </p>
           </div>
         </div>
 
