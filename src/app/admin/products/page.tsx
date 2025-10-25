@@ -1,81 +1,143 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Filter, Edit, Trash2, Eye, Plus, Package } from 'lucide-react';
+import { Search, Filter, Edit, Eye, Plus, Package, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAdminProducts, createProduct, updateProduct, deleteProduct } from '@/services/adminApi';
 import Image from 'next/image';
+import ProductForm from '@/components/admin/ProductForm';
+import DeleteConfirmModal from '@/components/shared/DeleteConfirmModal';
 
 export default function AdminProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-
-  // Mock products data
-  const products = [
-    {
-      id: 'PROD-001',
-      name: 'Classic White Shirt',
-      category: 'mens',
-      price: 89.99,
-      originalPrice: 99.99,
-      stock: 25,
-      status: 'active',
-      image: '/images/product1.jpg',
-      description: 'Premium cotton white shirt',
-      sizes: ['S', 'M', 'L', 'XL'],
-      colors: ['White', 'Blue']
-    },
-    {
-      id: 'PROD-002',
-      name: 'Summer Dress',
-      category: 'womens',
-      price: 149.99,
-      originalPrice: null,
-      stock: 12,
-      status: 'active',
-      image: '/images/product2.jpg',
-      description: 'Elegant summer dress',
-      sizes: ['XS', 'S', 'M', 'L'],
-      colors: ['Red', 'Blue', 'Green']
-    },
-    {
-      id: 'PROD-003',
-      name: 'Kids T-Shirt',
-      category: 'kids',
-      price: 29.99,
-      originalPrice: 39.99,
-      stock: 0,
-      status: 'out_of_stock',
-      image: '/images/product3.jpg',
-      description: 'Comfortable kids t-shirt',
-      sizes: ['XS', 'S', 'M'],
-      colors: ['Yellow', 'Pink']
-    }
-  ];
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'out_of_stock': return 'bg-red-100 text-red-800';
-      case 'discontinued': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const handleDeleteProduct = (productId: string) => {
-    if (confirm('Are you sure you want to delete this product?')) {
-      console.log(`Deleting product ${productId}`);
-    }
-  };
-
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isProductFormOpen, setIsProductFormOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
+  
+  // Filter states
+  const [filters, setFilters] = useState({
+    category_id: '',
+    in_stock: '',
+    is_active: '',
+    featured: '',
+    sort_by: 'created_at',
+    sort_order: 'desc'
   });
+  
+  const queryClient = useQueryClient();
+
+  // Fetch products from backend
+  const {
+    data: productsResponse,
+    isLoading,
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ['admin-products', currentPage, searchTerm, filters],
+    queryFn: () => getAdminProducts({
+      page: currentPage,
+      limit: 12,
+      search: searchTerm || undefined,
+      category_id: filters.category_id || undefined,
+      in_stock: filters.in_stock ? filters.in_stock === 'true' : undefined,
+      is_active: filters.is_active ? filters.is_active === 'true' : undefined,
+      featured: filters.featured ? filters.featured === 'true' : undefined,
+      sort_by: filters.sort_by,
+      sort_order: filters.sort_order as 'asc' | 'desc',
+    }),
+  });
+
+  const products = productsResponse?.data || [];
+  const pagination = productsResponse?.meta?.pagination;
+
+  // Mutations for CRUD operations
+  const createMutation = useMutation({
+    mutationFn: createProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      setIsProductFormOpen(false);
+      setSelectedProduct(null);
+    },
+    onError: (error) => {
+      console.error('Error creating product:', error);
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateProduct(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      setIsProductFormOpen(false);
+      setSelectedProduct(null);
+    },
+    onError: (error) => {
+      console.error('Error updating product:', error);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      setIsDeleteModalOpen(false);
+      setSelectedProduct(null);
+    },
+    onError: (error) => {
+      console.error('Error deleting product:', error);
+    }
+  });
+
+  // Event handlers
+  const handleCreateProduct = () => {
+    setFormMode('create');
+    setSelectedProduct(null);
+    setIsProductFormOpen(true);
+  };
+
+  const handleEditProduct = (product: any) => {
+    setFormMode('edit');
+    setSelectedProduct(product);
+    setIsProductFormOpen(true);
+  };
+
+  const handleDeleteProduct = (product: any) => {
+    setSelectedProduct(product);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleFormSubmit = (data: any) => {
+    if (formMode === 'create') {
+      createMutation.mutate(data);
+    } else if (selectedProduct) {
+      updateMutation.mutate({ id: selectedProduct.id, data });
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (selectedProduct) {
+      deleteMutation.mutate(selectedProduct.id);
+    }
+  };
+
+  const getStatusColor = (isActive: boolean, stockQuantity: number) => {
+    if (!isActive) return 'bg-gray-100 text-gray-800';
+    if (stockQuantity <= 0) return 'bg-red-100 text-red-800';
+    if (stockQuantity <= 5) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-green-100 text-green-800';
+  };
+
+  const getStatusText = (isActive: boolean, stockQuantity: number) => {
+    if (!isActive) return 'Inactive';
+    if (stockQuantity <= 0) return 'Out of Stock';
+    if (stockQuantity <= 5) return 'Low Stock';
+    return 'In Stock';
+  };
 
   return (
     <div className="p-8">
@@ -84,7 +146,7 @@ export default function AdminProductsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Products Management</h1>
           <p className="text-gray-600 mt-2">Manage your product catalog</p>
         </div>
-        <Button>
+        <Button onClick={handleCreateProduct}>
           <Plus className="h-4 w-4 mr-2" />
           Add Product
         </Button>
@@ -93,9 +155,10 @@ export default function AdminProductsPage() {
       {/* Filters */}
       <Card className="mb-6">
         <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
+          <div className="space-y-4">
+            {/* Search Row */}
+            <div className="w-full">
+              <div className="relative max-w-md">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
                   placeholder="Search products by name or ID..."
@@ -105,21 +168,96 @@ export default function AdminProductsPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-2">
+            
+            {/* Filters Row */}
+            <div className="flex gap-2 flex-wrap items-center">
+              {/* Category Filter */}
               <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={filters.category_id}
+                onChange={(e) => setFilters(prev => ({ ...prev, category_id: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
-                <option value="all">All Categories</option>
-                <option value="mens">Men&apos;s</option>
-                <option value="womens">Women&apos;s</option>
-                <option value="kids">Kids</option>
-                <option value="accessories">Accessories</option>
+                <option value="">All Categories</option>
+                <option value="1">Men&apos;s Clothing</option>
+                <option value="2">Women&apos;s Clothing</option>
+                <option value="3">Accessories</option>
+                <option value="4">Footwear</option>
               </select>
-              <Button variant="outline">
+
+              {/* Stock Status Filter */}
+              <select
+                value={filters.in_stock}
+                onChange={(e) => setFilters(prev => ({ ...prev, in_stock: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">All Stock</option>
+                <option value="true">In Stock</option>
+                <option value="false">Out of Stock</option>
+              </select>
+
+              {/* Active Status Filter */}
+              <select
+                value={filters.is_active}
+                onChange={(e) => setFilters(prev => ({ ...prev, is_active: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">All Status</option>
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+
+              {/* Featured Filter */}
+              <select
+                value={filters.featured}
+                onChange={(e) => setFilters(prev => ({ ...prev, featured: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">All Featured</option>
+                <option value="true">Featured</option>
+                <option value="false">Not Featured</option>
+              </select>
+
+              {/* Sort By Filter */}
+              <select
+                value={filters.sort_by}
+                onChange={(e) => setFilters(prev => ({ ...prev, sort_by: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="created_at">Sort by Date</option>
+                <option value="name">Sort by Name</option>
+                <option value="price">Sort by Price</option>
+                <option value="stock_quantity">Sort by Stock</option>
+              </select>
+
+              {/* Sort Order Filter */}
+              <select
+                value={filters.sort_order}
+                onChange={(e) => setFilters(prev => ({ ...prev, sort_order: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
+
+              {/* Clear Filters Button */}
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setFilters({
+                    category_id: '',
+                    in_stock: '',
+                    is_active: '',
+                    featured: '',
+                    sort_by: 'created_at',
+                    sort_order: 'desc'
+                  });
+                  setSearchTerm('');
+                  setCurrentPage(1);
+                }}
+                className="text-sm"
+              >
                 <Filter className="h-4 w-4 mr-2" />
-                Filter
+                Clear
               </Button>
             </div>
           </div>
@@ -127,81 +265,31 @@ export default function AdminProductsPage() {
       </Card>
 
       {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProducts.map((product) => (
-          <Card key={product.id} className="overflow-hidden">
-            <div className="aspect-square bg-gray-100 relative">
-              {product.image ? (
-                <Image
-                  src={product.image}
-                  alt={product.name}
-                  fill
-                  className="object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Package className="h-16 w-16 text-gray-400" />
-                </div>
-              )}
-              <div className="absolute top-2 right-2">
-                <Badge className={getStatusColor(product.status)}>
-                  {product.status.replace('_', ' ')}
-                </Badge>
-              </div>
-            </div>
-            
-            <CardContent className="p-4">
-              <div className="mb-2">
-                <h3 className="font-semibold text-gray-900">{product.name}</h3>
-                <p className="text-sm text-gray-500">{product.id}</p>
-              </div>
-              
-              <div className="mb-2">
-                <div className="flex items-center space-x-2">
-                  <span className="font-bold text-gray-900">${product.price}</span>
-                  {product.originalPrice && (
-                    <span className="text-sm text-gray-500 line-through">
-                      ${product.originalPrice}
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-gray-600">Stock: {product.stock}</p>
-              </div>
-              
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-1">Category: {product.category}</p>
-                <p className="text-sm text-gray-600">
-                  Sizes: {product.sizes.join(', ')}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Colors: {product.colors.join(', ')}
-                </p>
-              </div>
-              
-              <div className="flex space-x-2">
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Eye className="h-4 w-4 mr-1" />
-                  View
-                </Button>
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Edit className="h-4 w-4 mr-1" />
-                  Edit
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => handleDeleteProduct(product.id)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {filteredProducts.length === 0 && (
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Card key={index} className="overflow-hidden animate-pulse">
+              <div className="aspect-square bg-gray-200"></div>
+              <CardContent className="p-4">
+                <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                <div className="h-3 bg-gray-200 rounded w-2/3 mb-4"></div>
+                <div className="h-3 bg-gray-200 rounded mb-2"></div>
+                <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : error ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load products</h3>
+            <Button onClick={() => refetch()} className="mt-4">
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      ) : products.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -209,7 +297,150 @@ export default function AdminProductsPage() {
             <p className="text-gray-600">Try adjusting your search or filter criteria.</p>
           </CardContent>
         </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {products.map((product) => (
+              <Card key={product.id} className="overflow-hidden">
+                <div className="aspect-square bg-gray-100 relative">
+                  {product.images && product.images.length > 0 ? (
+                    <Image
+                      src={product.images[0]}
+                      alt={product.name}
+                      fill
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Package className="h-16 w-16 text-gray-400" />
+                    </div>
+                  )}
+                  <div className="absolute top-2 right-2">
+                    <Badge className={getStatusColor(product.is_active, product.stock_quantity)}>
+                      {getStatusText(product.is_active, product.stock_quantity)}
+                    </Badge>
+                  </div>
+                </div>
+                
+                <CardContent className="p-4">
+                  <div className="mb-2">
+                    <h3 className="font-semibold text-gray-900">{product.name}</h3>
+                    <p className="text-sm text-gray-500">SKU: {product.sku || 'N/A'}</p>
+                  </div>
+                  
+                  <div className="mb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-gray-900">${Number(product.price).toFixed(2)}</span>
+                      {product.original_price && Number(product.original_price) > Number(product.price) && (
+                        <span className="text-sm text-gray-500 line-through">
+                          ${Number(product.original_price).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    <p className={`text-sm font-medium ${
+                      product.stock_quantity <= 0 ? 'text-red-600' : 
+                      product.stock_quantity <= 5 ? 'text-yellow-600' : 
+                      'text-green-600'
+                    }`}>
+                      Stock: {product.stock_quantity} {
+                        product.stock_quantity <= 0 ? '(Out of Stock)' :
+                        product.stock_quantity <= 5 ? '(Low Stock)' :
+                        '(In Stock)'
+                      }
+                    </p>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600 mb-1">Featured: {product.featured ? 'Yes' : 'No'}</p>
+                    <p className="text-sm text-gray-600">
+                      Sizes: {product.sizes.length > 0 ? product.sizes.join(', ') : 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Colors: {product.colors.length > 0 ? product.colors.join(', ') : 'N/A'}
+                    </p>
+                  </div>
+                  
+                  <div className="flex space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => handleEditProduct(product)}
+                    >
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1 text-red-600 hover:text-red-700"
+                      onClick={() => handleDeleteProduct(product)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {pagination && pagination.total_pages > 1 && (
+            <div className="flex items-center justify-between mt-8">
+              <div className="text-sm text-gray-500">
+                Showing {((pagination.current_page - 1) * pagination.per_page) + 1} to{' '}
+                {Math.min(pagination.current_page * pagination.per_page, pagination.total)} of{' '}
+                {pagination.total} products
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(Math.min(pagination.total_pages, currentPage + 1))}
+                  disabled={currentPage === pagination.total_pages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
+
+      {/* Product Form Modal */}
+      <ProductForm
+        isOpen={isProductFormOpen}
+        onClose={() => {
+          setIsProductFormOpen(false);
+          setSelectedProduct(null);
+        }}
+        onSubmit={handleFormSubmit}
+        initialData={selectedProduct}
+        isLoading={createMutation.isPending || updateMutation.isPending}
+        mode={formMode}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setSelectedProduct(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Product"
+        message={`Are you sure you want to delete "${selectedProduct?.name}"? This action cannot be undone.`}
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }

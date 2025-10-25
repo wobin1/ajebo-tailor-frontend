@@ -1,59 +1,100 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Filter, Edit, Trash2, Eye, Plus } from 'lucide-react';
+import { Search, Eye, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAdminOrders, getAdminOrder, updateOrder, deleteOrder } from '@/services/adminApi';
+import { toast } from 'sonner';
+import ViewOrderModal from '@/components/admin/ViewOrderModal';
+import DeleteConfirmModal from '@/components/shared/DeleteConfirmModal';
 
 export default function AdminOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  // Mock orders data
-  const orders = [
-    {
-      id: 'ORD-001',
-      customer: 'John Doe',
-      email: 'john@example.com',
-      total: 299.99,
-      status: 'pending',
-      items: 3,
-      date: '2024-01-15',
-      address: '123 Main St, City, State 12345'
+  // Fetch orders from backend
+  const {
+    data: ordersResponse,
+    isLoading,
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ['admin-orders', { 
+      page: currentPage, 
+      limit: 20, 
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      priority: priorityFilter !== 'all' ? priorityFilter : undefined,
+      payment_status: paymentStatusFilter !== 'all' ? paymentStatusFilter : undefined,
+      search: searchTerm || undefined,
+      sort_by: 'created_at',
+      sort_order: 'desc'
+    }],
+    queryFn: () => getAdminOrders({ 
+      page: currentPage, 
+      limit: 20, 
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      priority: priorityFilter !== 'all' ? priorityFilter : undefined,
+      payment_status: paymentStatusFilter !== 'all' ? paymentStatusFilter : undefined,
+      search: searchTerm || undefined,
+      sort_by: 'created_at',
+      sort_order: 'desc'
+    }),
+    staleTime: 30 * 1000, // 30 seconds
+  });
+
+  // Mutation for updating order status
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ orderId, status }: { orderId: string; status: string }) => 
+      updateOrder(orderId, { status: status as 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' }),
+    onSuccess: () => {
+      toast.success('Order status updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
     },
-    {
-      id: 'ORD-002',
-      customer: 'Jane Smith',
-      email: 'jane@example.com',
-      total: 149.50,
-      status: 'processing',
-      items: 1,
-      date: '2024-01-14',
-      address: '456 Oak Ave, City, State 67890'
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to update order status');
     },
-    {
-      id: 'ORD-003',
-      customer: 'Mike Johnson',
-      email: 'mike@example.com',
-      total: 89.99,
-      status: 'shipped',
-      items: 2,
-      date: '2024-01-13',
-      address: '789 Pine St, City, State 11111'
+  });
+
+  // Mutation for deleting order
+  const deleteOrderMutation = useMutation({
+    mutationFn: (orderId: string) => deleteOrder(orderId),
+    onSuccess: () => {
+      toast.success('Order cancelled successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      setShowDeleteModal(false);
+      setOrderToDelete(null);
     },
-    {
-      id: 'ORD-004',
-      customer: 'Sarah Wilson',
-      email: 'sarah@example.com',
-      total: 199.99,
-      status: 'delivered',
-      items: 1,
-      date: '2024-01-12',
-      address: '321 Elm St, City, State 22222'
-    }
-  ];
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to cancel order');
+    },
+  });
+
+  // Fetch specific order for view modal
+  const {
+    data: selectedOrderResponse,
+    isLoading: isOrderLoading,
+  } = useQuery({
+    queryKey: ['admin-order', selectedOrderId],
+    queryFn: () => selectedOrderId ? getAdminOrder(selectedOrderId) : null,
+    enabled: !!selectedOrderId && showViewModal,
+  });
+
+  const orders = ordersResponse?.data || [];
+  const pagination = ordersResponse?.meta?.pagination;
+  const selectedOrder = selectedOrderResponse?.data || null;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -67,24 +108,47 @@ export default function AdminOrdersPage() {
   };
 
   const handleStatusUpdate = (orderId: string, newStatus: string) => {
-    console.log(`Updating order ${orderId} to status: ${newStatus}`);
-    // Here you would typically make an API call to update the order status
+    updateStatusMutation.mutate({ orderId, status: newStatus });
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    if (confirm('Are you sure you want to delete this order?')) {
-      console.log(`Deleting order ${orderId}`);
-      // Here you would typically make an API call to delete the order
+    setOrderToDelete(orderId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteOrder = () => {
+    if (orderToDelete) {
+      deleteOrderMutation.mutate(orderToDelete);
     }
   };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const handleViewOrder = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    setShowViewModal(true);
+  };
+
+  const handleCloseViewModal = () => {
+    setShowViewModal(false);
+    setSelectedOrderId(null);
+  };
+
+  const getPriorityColor = (priority?: string) => {
+    switch (priority) {
+      case 'urgent': return 'bg-red-100 text-red-800';
+      case 'high': return 'bg-orange-100 text-orange-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'low': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
 
   return (
     <div className="p-8">
@@ -122,15 +186,34 @@ export default function AdminOrdersPage() {
               >
                 <option value="all">All Status</option>
                 <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
                 <option value="processing">Processing</option>
                 <option value="shipped">Shipped</option>
                 <option value="delivered">Delivered</option>
                 <option value="cancelled">Cancelled</option>
               </select>
-              <Button variant="outline">
-                <Filter className="h-4 w-4 mr-2" />
-                Filter
-              </Button>
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Priority</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+              <select
+                value={paymentStatusFilter}
+                onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Payment</option>
+                <option value="pending">Payment Pending</option>
+                <option value="paid">Paid</option>
+                <option value="failed">Failed</option>
+                <option value="refunded">Refunded</option>
+              </select>
             </div>
           </div>
         </CardContent>
@@ -139,77 +222,175 @@ export default function AdminOrdersPage() {
       {/* Orders Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Orders ({filteredOrders.length})</CardTitle>
+          <CardTitle>Orders ({orders.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-4 font-medium text-gray-900">Order ID</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Customer</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Status</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Items</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Total</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Date</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.map((order) => (
-                  <tr key={order.id} className="border-b hover:bg-gray-50">
-                    <td className="p-4">
-                      <div className="font-medium text-gray-900">{order.id}</div>
-                    </td>
-                    <td className="p-4">
-                      <div>
-                        <div className="font-medium text-gray-900">{order.customer}</div>
-                        <div className="text-sm text-gray-500">{order.email}</div>
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <select
-                        value={order.status}
-                        onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
-                        className={`px-2 py-1 text-xs font-medium rounded-full border-0 ${getStatusColor(order.status)}`}
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="processing">Processing</option>
-                        <option value="shipped">Shipped</option>
-                        <option value="delivered">Delivered</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    </td>
-                    <td className="p-4 text-gray-900">{order.items}</td>
-                    <td className="p-4">
-                      <div className="font-medium text-gray-900">${order.total}</div>
-                    </td>
-                    <td className="p-4 text-gray-500">{order.date}</td>
-                    <td className="p-4">
-                      <div className="flex space-x-2">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleDeleteOrder(order.id)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </td>
+          {isLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="flex items-center space-x-4 p-4 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-20"></div>
+                  <div className="h-4 bg-gray-200 rounded w-32"></div>
+                  <div className="h-4 bg-gray-200 rounded w-16"></div>
+                  <div className="h-4 bg-gray-200 rounded w-12"></div>
+                  <div className="h-4 bg-gray-200 rounded w-20"></div>
+                  <div className="h-4 bg-gray-200 rounded w-24"></div>
+                </div>
+              ))}
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <p className="text-red-500">Failed to load orders</p>
+              <Button onClick={() => refetch()} className="mt-4">
+                Try Again
+              </Button>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500">No orders found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-4 font-medium text-gray-900">Order ID</th>
+                    <th className="text-left p-4 font-medium text-gray-900">Customer</th>
+                    <th className="text-left p-4 font-medium text-gray-900">Status</th>
+                    <th className="text-left p-4 font-medium text-gray-900">Priority</th>
+                    <th className="text-left p-4 font-medium text-gray-900">Items</th>
+                    <th className="text-left p-4 font-medium text-gray-900">Total</th>
+                    <th className="text-left p-4 font-medium text-gray-900">Date</th>
+                    <th className="text-left p-4 font-medium text-gray-900">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {orders.map((order) => (
+                    <tr key={order.id} className="border-b hover:bg-gray-50">
+                      <td className="p-4">
+                        <div className="font-medium text-gray-900">
+                          #{order.order_number || order.id.slice(-6)}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {order.customer_name || 'N/A'}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {order.customer_email || 'N/A'}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <select
+                          value={order.status}
+                          onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
+                          className={`px-2 py-1 text-xs font-medium rounded-full border-0 ${getStatusColor(order.status)}`}
+                          disabled={updateStatusMutation.isPending}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="confirmed">Confirmed</option>
+                          <option value="processing">Processing</option>
+                          <option value="shipped">Shipped</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(order.priority)}`}>
+                          {order.priority ? order.priority.charAt(0).toUpperCase() + order.priority.slice(1) : 'Medium'}
+                        </span>
+                      </td>
+                      <td className="p-4 text-gray-900">
+                        {order.items_count || order.items?.length || 0}
+                      </td>
+                      <td className="p-4">
+                        <div className="font-medium text-gray-900">
+                          ${order.total.toFixed(2)}
+                        </div>
+                      </td>
+                      <td className="p-4 text-gray-500">
+                        {formatDate(order.created_at)}
+                      </td>
+                      <td className="p-4">
+                        <div className="flex space-x-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleViewOrder(order.id)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleDeleteOrder(order.id)}
+                            disabled={deleteOrderMutation.isPending}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {pagination && pagination.total_pages > 1 && (
+            <div className="flex items-center justify-between mt-6">
+              <div className="text-sm text-gray-500">
+                Showing {((pagination.current_page - 1) * pagination.per_page) + 1} to{' '}
+                {Math.min(pagination.current_page * pagination.per_page, pagination.total)} of{' '}
+                {pagination.total} orders
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(Math.min(pagination.total_pages, currentPage + 1))}
+                  disabled={currentPage === pagination.total_pages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* View Order Modal */}
+      <ViewOrderModal
+        isOpen={showViewModal}
+        onClose={handleCloseViewModal}
+        order={selectedOrder}
+        isLoading={isOrderLoading}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setOrderToDelete(null);
+        }}
+        onConfirm={confirmDeleteOrder}
+        title="Cancel Order"
+        message="Are you sure you want to cancel this order? This action will set the order status to cancelled."
+        confirmText={deleteOrderMutation.isPending ? 'Cancelling...' : 'Cancel Order'}
+        isLoading={deleteOrderMutation.isPending}
+      />
     </div>
   );
 }

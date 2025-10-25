@@ -32,6 +32,18 @@ const nextConfig: NextConfig = {
         hostname: 'via.placeholder.com',
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn.shopify.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.doronsupply.com',
+        port: '',
+        pathname: '/**',
       }
     ],
   },

@@ -50,58 +50,64 @@ export function ProductCard({ product }: ProductCardProps) {
 
   return (
     <div className="group relative">
-      <Link href={`/product/${product.id}`}>
-        <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 relative">
-          {/* Wishlist Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-3 right-3 z-10 bg-white/80 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <Heart className="h-4 w-4" />
-          </Button>
+      <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 relative">
+        {/* Clickable Link Overlay */}
+        <Link 
+          href={`/product/${product.id}`}
+          className="absolute inset-0 z-0"
+        />
 
-          {/* Product Image */}
-          <div className="relative w-full h-full bg-gray-200">
-            {product.images[0] ? (
-              <Image
-                src={product.images[0]}
-                alt={product.name}
-                fill
-                className="object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No Image
-              </div>
-            )}
-          </div>
+        {/* Wishlist Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute top-3 right-3 z-20 bg-white/80 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <Heart className="h-4 w-4" />
+        </Button>
 
-          {/* Sale Badge */}
-          {discountPercentage > 0 && (
-            <div className="absolute top-3 left-3 bg-red-500 text-white px-2 py-1 text-xs font-medium rounded">
-              -{discountPercentage}%
+        {/* Product Image */}
+        <div className="relative w-full h-full bg-gray-200">
+          {product.images[0] ? (
+            <Image
+              src={product.images[0]}
+              alt={product.name}
+              fill
+              className="object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              No Image
             </div>
           )}
-
-          {/* Quick Add Button */}
-          <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button
-              onClick={handleAddToCart}
-              disabled={isAddingToCart}
-              className="w-full bg-black text-white hover:bg-gray-900 text-sm disabled:opacity-50"
-              size="sm"
-            >
-              {isAddingToCart ? 'Adding...' : 'Quick Add'}
-            </Button>
-          </div>
         </div>
 
-        {/* Product Info */}
+        {/* Sale Badge */}
+        {discountPercentage > 0 && (
+          <div className="absolute top-3 left-3 bg-red-500 text-white px-2 py-1 text-xs font-medium rounded z-10">
+            -{discountPercentage}%
+          </div>
+        )}
+
+        {/* Quick Add Button */}
+        <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          <Button
+            onClick={handleAddToCart}
+            disabled={isAddingToCart}
+            className="w-full bg-black text-white hover:bg-gray-900 text-sm disabled:opacity-50"
+            size="sm"
+          >
+            {isAddingToCart ? 'Adding...' : 'Quick Add'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Product Info */}
+      <Link href={`/product/${product.id}`}>
         <div className="mt-4 space-y-2">
           <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
             {product.name}

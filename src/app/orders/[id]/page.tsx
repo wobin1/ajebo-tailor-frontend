@@ -281,7 +281,7 @@ export default function OrderDetailsPage() {
                           <p>Quantity: {item.quantity}</p>
                         </div>
                         <p className="mt-2 text-sm font-medium text-gray-900">
-                          ${(Number(item.price) * item.quantity).toFixed(2)}
+                          ${(Number(item.product_price) * item.quantity).toFixed(2)}
                         </p>
                       </div>
                     </div>
@@ -305,45 +305,47 @@ export default function OrderDetailsPage() {
               <CardContent className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span>Subtotal</span>
-                  <span>${order.subtotal?.toFixed(2) || '0.00'}</span>
+                  <span>${Number(order.subtotal || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Shipping</span>
-                  <span>${order.shipping_amount?.toFixed(2) || '10.00'}</span>
+                  <span>${Number(order.shipping_amount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Tax</span>
-                  <span>${order.tax_amount?.toFixed(2) || '0.00'}</span>
+                  <span>${Number(order.tax_amount || 0).toFixed(2)}</span>
                 </div>
                 <div className="border-t pt-3">
                   <div className="flex justify-between font-medium">
                     <span>Total</span>
-                    <span>${order.total_amount?.toFixed(2) || '0.00'}</span>
+                    <span>${Number(order.total_amount || order.total || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Shipping Address */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Shipping Address</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm text-gray-600 space-y-1">
-                  <p className="font-medium text-gray-900">
-                    {order.shipping_address.firstName} {order.shipping_address.lastName}
-                  </p>
-                  <p>{order.shipping_address.address1}</p>
-                  {order.shipping_address.address2 && <p>{order.shipping_address.address2}</p>}
-                  <p>
-                    {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.zipCode}
-                  </p>
-                  <p>{order.shipping_address.country}</p>
-                  {order.shipping_address.phone && <p>Phone: {order.shipping_address.phone}</p>}
-                </div>
-              </CardContent>
-            </Card>
+            {order.shipping_address && Object.keys(order.shipping_address).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Shipping Address</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-sm text-gray-600 space-y-1">
+                    <p className="font-medium text-gray-900">
+                      {order.shipping_address.firstName} {order.shipping_address.lastName}
+                    </p>
+                    <p>{order.shipping_address.address1}</p>
+                    {order.shipping_address.address2 && <p>{order.shipping_address.address2}</p>}
+                    <p>
+                      {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.zipCode}
+                    </p>
+                    <p>{order.shipping_address.country}</p>
+                    {order.shipping_address.phone && <p>Phone: {order.shipping_address.phone}</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Payment Method */}
             <Card>

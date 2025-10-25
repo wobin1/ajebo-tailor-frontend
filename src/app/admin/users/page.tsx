@@ -1,18 +1,76 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Filter, Edit, Trash2, Eye, Plus, User, Mail, Phone } from 'lucide-react';
+import { Search, Filter, Edit, Trash2, Eye, Plus, User, Mail, Phone, Users, UserCheck, Palette, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAdminUsers, updateUserRole, deleteUser } from '@/services/adminApi';
+import { toast } from 'sonner';
+import UserCreateModal from '@/components/admin/UserCreateModal';
+import UserEditModal from '@/components/admin/UserEditModal';
+import UserViewModal from '@/components/admin/UserViewModal';
+import DeleteConfirmModal from '@/components/shared/DeleteConfirmModal';
 
 export default function AdminUsersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [viewUserId, setViewUserId] = useState<string | null>(null);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  // Mock users data
-  const users = [
+  // Fetch users from backend
+  const { data: usersResponse, isLoading, error, refetch } = useQuery({
+    queryKey: ['admin-users', currentPage, searchTerm, roleFilter],
+    queryFn: () => getAdminUsers({
+      page: currentPage,
+      limit: 20,
+      search: searchTerm || undefined,
+      role: roleFilter !== 'all' ? roleFilter : undefined,
+      sort_by: 'created_at',
+      sort_order: 'desc'
+    }),
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
+
+  const users = usersResponse?.data || [];
+  const pagination = usersResponse?.meta?.pagination;
+
+  // Update user role mutation
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: 'customer' | 'designer' | 'admin' }) => 
+      updateUserRole(userId, role),
+    onSuccess: () => {
+      toast.success('User role updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update user role';
+      toast.error(errorMessage);
+    },
+  });
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: (userId: string) => deleteUser(userId),
+    onSuccess: () => {
+      toast.success('User deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      setDeleteUserId(null);
+    },
+    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete user';
+      toast.error(errorMessage);
+    },
+  });
+
+  // Mock users data for fallback
+  const mockUsers = [
     {
       id: 'USER-001',
       name: 'John Doe',
@@ -89,16 +147,34 @@ export default function AdminUsersPage() {
   };
 
   const handleDeleteUser = (userId: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      console.log(`Deleting user ${userId}`);
+    setDeleteUserId(userId);
+  };
+
+  const handleModalClose = () => {
+    setIsCreateModalOpen(false);
+    setEditUserId(null);
+    setViewUserId(null);
+    setDeleteUserId(null);
+    // Refresh data after modal operations
+    queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+  };
+
+  const handleViewUser = (userId: string) => {
+    setViewUserId(userId);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteUserId) {
+      deleteUserMutation.mutate(deleteUserId);
     }
   };
 
   const handleRoleUpdate = (userId: string, newRole: string) => {
-    console.log(`Updating user ${userId} role to: ${newRole}`);
+    updateRoleMutation.mutate({ userId, role: newRole as 'customer' | 'designer' | 'admin' });
   };
 
-  const filteredUsers = users.filter(user => {
+  // Use backend data if available, otherwise use mock data for display
+  const displayUsers = users.length > 0 ? users : mockUsers.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.id.toLowerCase().includes(searchTerm.toLowerCase());
@@ -107,65 +183,76 @@ export default function AdminUsersPage() {
   });
 
   return (
-    <div className="p-8">
+    <div className="p-6 w-full max-w-none overflow-hidden">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Users Management</h1>
           <p className="text-gray-600 mt-2">Manage user accounts and permissions</p>
         </div>
-        <Button>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add User
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <Card>
-          <CardContent className="p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <Card className="shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center">
-              <User className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Users</p>
-                <p className="text-2xl font-bold text-gray-900">{users.length}</p>
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Users className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-xs font-medium text-gray-600">Total Users</p>
+                <p className="text-xl font-bold text-gray-900">{displayUsers.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
+
+        <Card className="shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center">
-              <User className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Active Users</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {users.filter(u => u.status === 'active').length}
+              <div className="p-2 bg-green-100 rounded-lg">
+                <UserCheck className="h-5 w-5 text-green-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-xs font-medium text-gray-600">Active Users</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {displayUsers.filter(user => 'is_active' in user ? user.is_active : user.status === 'active').length}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
+
+        <Card className="shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center">
-              <User className="h-8 w-8 text-purple-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Designers</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {users.filter(u => u.role === 'designer').length}
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Palette className="h-5 w-5 text-purple-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-xs font-medium text-gray-600">Designers</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {displayUsers.filter(user => user.role === 'designer').length}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
+
+        <Card className="shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center">
-              <User className="h-8 w-8 text-red-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Admins</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {users.filter(u => u.role === 'admin').length}
+              <div className="p-2 bg-red-100 rounded-lg">
+                <Shield className="h-5 w-5 text-red-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-xs font-medium text-gray-600">Admins</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {displayUsers.filter(user => user.role === 'admin').length}
                 </p>
               </div>
             </div>
@@ -209,97 +296,200 @@ export default function AdminUsersPage() {
       </Card>
 
       {/* Users Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Users ({filteredUsers.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-4 font-medium text-gray-900">User</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Contact</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Role</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Status</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Orders</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Total Spent</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Join Date</th>
-                  <th className="text-left p-4 font-medium text-gray-900">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="border-b hover:bg-gray-50">
-                    <td className="p-4">
-                      <div className="flex items-center">
-                        <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                          <User className="h-5 w-5 text-gray-600" />
+      {isLoading ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <div className="animate-pulse">
+              <div className="h-8 bg-gray-200 rounded mb-4"></div>
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-4 bg-gray-200 rounded"></div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : error ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <User className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load users</h3>
+            <Button onClick={() => refetch()} className="mt-4">
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Users ({displayUsers.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full table-fixed">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left p-3 font-medium text-gray-900 w-1/4">User</th>
+                      <th className="text-left p-3 font-medium text-gray-900 w-1/4 hidden md:table-cell">Contact</th>
+                      <th className="text-left p-3 font-medium text-gray-900 w-20">Role</th>
+                      <th className="text-left p-3 font-medium text-gray-900 w-16">Status</th>
+                      <th className="text-left p-3 font-medium text-gray-900 w-16 hidden lg:table-cell">Orders</th>
+                      <th className="text-left p-3 font-medium text-gray-900 w-20 hidden lg:table-cell">Total</th>
+                      <th className="text-left p-3 font-medium text-gray-900 w-20 hidden xl:table-cell">Date</th>
+                      <th className="text-left p-3 font-medium text-gray-900 w-24">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayUsers.map((user) => (
+                      <tr key={user.id} className="border-b hover:bg-gray-50">
+                    <td className="p-3">
+                      <div className="flex items-center min-w-0">
+                        <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                          <User className="h-4 w-4 text-gray-600" />
                         </div>
-                        <div className="ml-3">
-                          <div className="font-medium text-gray-900">{user.name}</div>
-                          <div className="text-sm text-gray-500">{user.id}</div>
+                        <div className="ml-2 min-w-0 flex-1">
+                          <div className="font-medium text-gray-900 truncate">{user.name}</div>
+                          <div className="text-xs text-gray-500 truncate">{user.id}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="p-4">
-                      <div className="flex flex-col space-y-1">
-                        <div className="flex items-center text-sm text-gray-600">
-                          <Mail className="h-4 w-4 mr-1" />
-                          {user.email}
+                    <td className="p-3 hidden md:table-cell">
+                      <div className="flex flex-col space-y-1 min-w-0">
+                        <div className="flex items-center text-xs text-gray-600 min-w-0">
+                          <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">{user.email}</span>
                         </div>
-                        <div className="flex items-center text-sm text-gray-600">
-                          <Phone className="h-4 w-4 mr-1" />
-                          {user.phone}
+                        <div className="flex items-center text-xs text-gray-600 min-w-0">
+                          <Phone className="h-3 w-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">{'phone' in user ? user.phone : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="p-4">
+                    <td className="p-3">
                       <select
                         value={user.role}
                         onChange={(e) => handleRoleUpdate(user.id, e.target.value)}
-                        className={`px-2 py-1 text-xs font-medium rounded-full border-0 ${getRoleColor(user.role)}`}
+                        className={`px-1 py-1 text-xs font-medium rounded border-0 w-full ${getRoleColor(user.role)}`}
                       >
                         <option value="customer">Customer</option>
                         <option value="designer">Designer</option>
                         <option value="admin">Admin</option>
                       </select>
                     </td>
-                    <td className="p-4">
-                      <Badge className={getStatusColor(user.status)}>
-                        {user.status}
+                    <td className="p-3">
+                      <Badge className={`text-xs ${getStatusColor('status' in user ? user.status : ('is_active' in user && user.is_active ? 'active' : 'inactive'))}`}>
+                        {'status' in user ? user.status : ('is_active' in user && user.is_active ? 'active' : 'inactive')}
                       </Badge>
                     </td>
-                    <td className="p-4 text-gray-900">{user.orders}</td>
-                    <td className="p-4">
-                      <div className="font-medium text-gray-900">${user.totalSpent}</div>
+                    <td className="p-3 text-xs text-gray-900 hidden lg:table-cell">
+                      {'orders' in user ? user.orders : 0}
                     </td>
-                    <td className="p-4 text-gray-500">{user.joinDate}</td>
-                    <td className="p-4">
-                      <div className="flex space-x-2">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4" />
+                    <td className="p-3 hidden lg:table-cell">
+                      <div className="text-xs font-medium text-gray-900">
+                        ${'totalSpent' in user ? user.totalSpent : 0}
+                      </div>
+                    </td>
+                    <td className="p-3 text-xs text-gray-500 hidden xl:table-cell">
+                      {'joinDate' in user ? user.joinDate : ('created_at' in user ? new Date(user.created_at).toLocaleDateString() : 'N/A')}
+                    </td>
+                    <td className="p-3">
+                      <div className="flex space-x-1">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleViewUser(user.id)}
+                          title="View user details"
+                          className="h-8 w-8 p-0"
+                        >
+                          <Eye className="h-3 w-3" />
                         </Button>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="h-4 w-4" />
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => setEditUserId(user.id)}
+                          title="Edit user"
+                          className="h-8 w-8 p-0"
+                        >
+                          <Edit className="h-3 w-3" />
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="sm"
                           onClick={() => handleDeleteUser(user.id)}
-                          className="text-red-600 hover:text-red-800"
+                          title="Delete user"
+                          className="text-red-600 hover:text-red-700 h-8 w-8 p-0"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pagination */}
+          {pagination && pagination.total_pages > 1 && (
+            <div className="flex items-center justify-between mt-8">
+              <div className="text-sm text-gray-500">
+                Showing {((pagination.current_page - 1) * pagination.per_page) + 1} to{' '}
+                {Math.min(pagination.current_page * pagination.per_page, pagination.total)} of{' '}
+                {pagination.total} users
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}>
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(Math.min(pagination.total_pages, currentPage + 1))}
+                  disabled={currentPage === pagination.total_pages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* User Management Modals */}
+      <UserCreateModal
+        isOpen={isCreateModalOpen}
+        onClose={handleModalClose}
+        onSuccess={handleModalClose}
+      />
+
+      <UserEditModal
+        isOpen={!!editUserId}
+        userId={editUserId}
+        onClose={handleModalClose}
+        onSuccess={handleModalClose}
+      />
+
+      <UserViewModal
+        isOpen={!!viewUserId}
+        userId={viewUserId}
+        onClose={handleModalClose}
+      />
+
+      <DeleteConfirmModal
+        isOpen={!!deleteUserId}
+        onClose={() => setDeleteUserId(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete User"
+        message={`Are you sure you want to delete this user? This action cannot be undone and will permanently remove the user from the system.`}
+        isLoading={deleteUserMutation.isPending}
+      />
     </div>
   );
 }
