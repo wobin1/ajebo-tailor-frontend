@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -11,17 +10,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Minus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 interface ProductFormData {
   name: string;
-  description: string;
+  description?: string | null;
   price: number;
-  original_price?: number;
-  sku: string;
+  original_price?: number | null;
+  sku?: string | null;
   stock_quantity: number;
-  category_id?: string;
-  subcategory_id?: string;
+  category_id?: string | null;
+  subcategory_id?: string | null;
   colors: string[];
   sizes: string[];
   tags: string[];
@@ -49,13 +48,13 @@ export default function ProductForm({
 }: ProductFormProps) {
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
-    description: '',
+    description: null,
     price: 0,
-    original_price: undefined,
-    sku: '',
+    original_price: null,
+    sku: null,
     stock_quantity: 0,
-    category_id: '',
-    subcategory_id: '',
+    category_id: null,
+    subcategory_id: null,
     colors: [],
     sizes: [],
     tags: [],
@@ -73,13 +72,13 @@ export default function ProductForm({
     if (initialData) {
       setFormData({
         name: initialData.name || '',
-        description: initialData.description || '',
+        description: initialData.description || null,
         price: initialData.price || 0,
-        original_price: initialData.original_price,
-        sku: initialData.sku || '',
+        original_price: initialData.original_price || null,
+        sku: initialData.sku || null,
         stock_quantity: initialData.stock_quantity || 0,
-        category_id: initialData.category_id || '',
-        subcategory_id: initialData.subcategory_id || '',
+        category_id: initialData.category_id || null,
+        subcategory_id: initialData.subcategory_id || null,
         colors: initialData.colors || [],
         sizes: initialData.sizes || [],
         tags: initialData.tags || [],
@@ -90,7 +89,7 @@ export default function ProductForm({
     }
   }, [initialData]);
 
-  const handleInputChange = (field: keyof ProductFormData, value: any) => {
+  const handleInputChange = (field: keyof ProductFormData, value: string | number | boolean | undefined) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -115,18 +114,7 @@ export default function ProductForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Clean up form data - convert empty strings to null for UUID fields
-    const cleanedData = {
-      ...formData,
-      category_id: formData.category_id || null,
-      subcategory_id: formData.subcategory_id || null,
-      sku: formData.sku || null,
-      description: formData.description || null,
-      original_price: formData.original_price || null
-    };
-    
-    onSubmit(cleanedData);
+    onSubmit(formData);
   };
 
   return (
@@ -153,7 +141,7 @@ export default function ProductForm({
                 <div>
                   <label className="block text-sm font-medium mb-2">SKU</label>
                   <Input
-                    value={formData.sku}
+                    value={formData.sku || ''}
                     onChange={(e) => handleInputChange('sku', e.target.value)}
                     placeholder="Enter SKU"
                   />
@@ -165,7 +153,7 @@ export default function ProductForm({
                 <textarea
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   rows={4}
-                  value={formData.description}
+                  value={formData.description || ''}
                   onChange={(e) => handleInputChange('description', e.target.value)}
                   placeholder="Enter product description"
                 />

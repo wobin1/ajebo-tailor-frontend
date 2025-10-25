@@ -3,6 +3,8 @@ export interface User {
   email: string;
   name: string;
   avatar?: string;
+  phone?: string;
+  dateOfBirth?: string;
   role: 'customer' | 'admin' | 'designer';
   is_active: boolean;
   email_verified: boolean;

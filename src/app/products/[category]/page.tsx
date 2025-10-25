@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProductFilters } from '@/components/products/ProductFilters';
@@ -19,7 +19,7 @@ interface FilterState {
   subcategory: string;
 }
 
-export default function ProductsPage() {
+function ProductsPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const category = params.category as string;
@@ -218,5 +218,26 @@ export default function ProductsPage() {
         </div>
       </div>
     </MainLayout>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={
+      <MainLayout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-64 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </MainLayout>
+    }>
+      <ProductsPageContent />
+    </Suspense>
   );
 }

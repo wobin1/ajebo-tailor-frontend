@@ -34,9 +34,7 @@ export interface CreateAddressData {
   address_type: 'billing' | 'shipping';
 }
 
-export interface UpdateAddressData extends Partial<CreateAddressData> {
-  // This interface extends CreateAddressData with all fields optional
-}
+export type UpdateAddressData = Partial<CreateAddressData>;
 
 export interface ApiResponse<T> {
   success: boolean;

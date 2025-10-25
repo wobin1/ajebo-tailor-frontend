@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, CheckCircle, Package, Truck, CreditCard, MessageCircle } from 'lucide-react';
@@ -12,7 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { getOrder, OrderItem, OrderResponse } from '@/services/orderApi';
 
-export default function OrderDetailsPage() {
+function OrderDetailsContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -404,5 +404,23 @@ export default function OrderDetailsPage() {
         </div>
       </div>
     </MainLayout>
+  );
+}
+
+export default function OrderDetailsPage() {
+  return (
+    <Suspense fallback={
+      <MainLayout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+            <div className="h-64 bg-gray-200 rounded"></div>
+            <div className="h-48 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </MainLayout>
+    }>
+      <OrderDetailsContent />
+    </Suspense>
   );
 }

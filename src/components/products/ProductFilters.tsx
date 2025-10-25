@@ -32,7 +32,7 @@ export function ProductFilters({
 }: ProductFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleFilterChange = (key: keyof FilterState, value: any) => {
+  const handleFilterChange = (key: keyof FilterState, value: string | string[]) => {
     onFiltersChange({ ...filters, [key]: value });
   };
 

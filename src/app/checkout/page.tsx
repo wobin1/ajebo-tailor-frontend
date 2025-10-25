@@ -71,7 +71,7 @@ export default function CheckoutPage() {
     );
   }
 
-  const onSubmit = async (data: CheckoutFormData) => {
+  const onSubmit = async (_data: CheckoutFormData) => {
     if (!user) {
       router.push('/auth/login?redirect=/checkout');
       return;

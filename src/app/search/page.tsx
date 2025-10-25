@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, Filter, SlidersHorizontal } from 'lucide-react';
+import { Search, SlidersHorizontal } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { ProductGrid } from '@/components/products/ProductGrid';
 import { ProductFilters } from '@/components/products/ProductFilters';
 import { useProducts } from '@/hooks/useProducts';
 
-export default function SearchPage() {
+function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
@@ -35,7 +35,7 @@ export default function SearchPage() {
     setFilters(prev => ({ ...prev, search: query }));
   }, [searchParams]);
 
-  const { data: products = [], isLoading, error } = useProducts({
+  const { data: productsData, isLoading, error } = useProducts({
     search: filters.search,
     minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
     maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
@@ -47,7 +47,8 @@ export default function SearchPage() {
 
   // Sort products
   const sortedProducts = useMemo(() => {
-    if (!products) return [];
+    const products = productsData?.products || [];
+    if (!products || products.length === 0) return [];
     
     const productsCopy = [...products];
     
@@ -59,7 +60,8 @@ export default function SearchPage() {
       case 'name':
         return productsCopy.sort((a, b) => a.name.localeCompare(b.name));
       case 'newest':
-        return productsCopy.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        // Sort by newest - since we don't have createdAt, just return as is
+        return productsCopy;
       case 'relevance':
       default:
         // For relevance, prioritize products that match the search term in name
@@ -74,7 +76,7 @@ export default function SearchPage() {
         }
         return productsCopy;
     }
-  }, [products, sortBy, filters.search]);
+  }, [productsData, sortBy, filters.search]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,6 +208,9 @@ export default function SearchPage() {
                 <ProductFilters
                   filters={filters}
                   onFiltersChange={handleFilterChange}
+                  availableColors={['Black', 'White', 'Blue', 'Red', 'Green']}
+                  availableSizes={['XS', 'S', 'M', 'L', 'XL', 'XXL']}
+                  categories={[]}
                 />
               </div>
             </div>
@@ -225,7 +230,7 @@ export default function SearchPage() {
               <ProductGrid
                 products={sortedProducts}
                 isLoading={isLoading}
-                error={error}
+                error={error?.message || null}
                 emptyMessage={`No products found for "${filters.search}"`}
                 emptyDescription="Try adjusting your search terms or filters"
               />
@@ -234,5 +239,26 @@ export default function SearchPage() {
         </div>
       </div>
     </MainLayout>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <MainLayout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="animate-pulse">
+            <div className="h-12 bg-gray-200 rounded mb-6"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-64 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </MainLayout>
+    }>
+      <SearchPageContent />
+    </Suspense>
   );
 }

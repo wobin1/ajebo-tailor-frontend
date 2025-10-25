@@ -94,7 +94,15 @@ export default function AdminOrdersPage() {
 
   const orders = ordersResponse?.data || [];
   const pagination = ordersResponse?.meta?.pagination;
-  const selectedOrder = selectedOrderResponse?.data || null;
+  
+  // Transform selectedOrder to add subtotal to items
+  const selectedOrder = selectedOrderResponse?.data ? {
+    ...selectedOrderResponse.data,
+    items: selectedOrderResponse.data.items?.map(item => ({
+      ...item,
+      subtotal: item.quantity * item.product_price
+    }))
+  } : null;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -388,7 +396,6 @@ export default function AdminOrdersPage() {
         onConfirm={confirmDeleteOrder}
         title="Cancel Order"
         message="Are you sure you want to cancel this order? This action will set the order status to cancelled."
-        confirmText={deleteOrderMutation.isPending ? 'Cancelling...' : 'Cancel Order'}
         isLoading={deleteOrderMutation.isPending}
       />
     </div>

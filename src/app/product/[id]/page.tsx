@@ -13,7 +13,7 @@ export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
   const productId = params.id as string;
-  const { addToCart } = useCart();
+  const { addItem } = useCart();
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState('');
@@ -72,7 +72,7 @@ export default function ProductDetailPage() {
     setSelectedColor(product.colors[0]);
   }
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (product.sizes.length > 0 && !selectedSize) {
       alert('Please select a size');
       return;
@@ -82,16 +82,14 @@ export default function ProductDetailPage() {
       return;
     }
 
-    addToCart({
-      id: `${product.id}-${selectedSize}-${selectedColor}`,
-      product,
-      size: selectedSize,
-      color: selectedColor,
-      quantity,
-    });
-    
-    // Show success message
-    alert('Product added to cart successfully!');
+    try {
+      await addItem(product, selectedSize, selectedColor, quantity);
+      // Show success message
+      alert('Product added to cart successfully!');
+    } catch (error) {
+      console.error('Failed to add to cart:', error);
+      alert('Failed to add product to cart. Please try again.');
+    }
   };
 
   const handleChatDesigner = () => {

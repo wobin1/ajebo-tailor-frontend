@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Package, TrendingUp, TrendingDown, XCircle, CheckCircle, Clock, Users, MessageCircle, Scissors, Truck } from 'lucide-react';
+import { Package, XCircle, CheckCircle, Clock, Users, MessageCircle, Scissors, Truck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';

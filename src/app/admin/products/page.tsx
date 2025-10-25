@@ -1,13 +1,31 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Filter, Edit, Eye, Plus, Package, Trash2 } from 'lucide-react';
+import { Search, Filter, Edit, Plus, Package, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAdminProducts, createProduct, updateProduct, deleteProduct } from '@/services/adminApi';
+
+interface ProductFormData {
+  id?: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  original_price?: number | null;
+  sku?: string | null;
+  stock_quantity: number;
+  category_id?: string | null;
+  subcategory_id?: string | null;
+  colors: string[];
+  sizes: string[];
+  tags: string[];
+  images: string[];
+  featured: boolean;
+  is_active: boolean;
+}
 import Image from 'next/image';
 import ProductForm from '@/components/admin/ProductForm';
 import DeleteConfirmModal from '@/components/shared/DeleteConfirmModal';
@@ -17,7 +35,7 @@ export default function AdminProductsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isProductFormOpen, setIsProductFormOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductFormData | null>(null);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
   
   // Filter states
@@ -58,7 +76,7 @@ export default function AdminProductsPage() {
 
   // Mutations for CRUD operations
   const createMutation = useMutation({
-    mutationFn: createProduct,
+    mutationFn: (data: ProductFormData) => createProduct(data as never),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
       setIsProductFormOpen(false);
@@ -70,7 +88,7 @@ export default function AdminProductsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => updateProduct(id, data),
+    mutationFn: ({ id, data }: { id: string; data: ProductFormData }) => updateProduct(id, data as never),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
       setIsProductFormOpen(false);
@@ -100,27 +118,27 @@ export default function AdminProductsPage() {
     setIsProductFormOpen(true);
   };
 
-  const handleEditProduct = (product: any) => {
+  const handleEditProduct = (product: ProductFormData) => {
     setFormMode('edit');
     setSelectedProduct(product);
     setIsProductFormOpen(true);
   };
 
-  const handleDeleteProduct = (product: any) => {
+  const handleDeleteProduct = (product: ProductFormData) => {
     setSelectedProduct(product);
     setIsDeleteModalOpen(true);
   };
 
-  const handleFormSubmit = (data: any) => {
+  const handleFormSubmit = (data: ProductFormData) => {
     if (formMode === 'create') {
       createMutation.mutate(data);
-    } else if (selectedProduct) {
+    } else if (selectedProduct?.id) {
       updateMutation.mutate({ id: selectedProduct.id, data });
     }
   };
 
   const handleConfirmDelete = () => {
-    if (selectedProduct) {
+    if (selectedProduct?.id) {
       deleteMutation.mutate(selectedProduct.id);
     }
   };
@@ -424,7 +442,7 @@ export default function AdminProductsPage() {
           setSelectedProduct(null);
         }}
         onSubmit={handleFormSubmit}
-        initialData={selectedProduct}
+        initialData={selectedProduct ?? undefined}
         isLoading={createMutation.isPending || updateMutation.isPending}
         mode={formMode}
       />
