@@ -31,6 +31,7 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  // Handling onsubmit
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     setError('');
