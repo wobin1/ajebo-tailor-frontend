@@ -18,7 +18,7 @@ export class AuthTester {
   static async testConnection(): Promise<AuthTestResult> {
     try {
       // Try to make a simple request to the backend
-      const response = await fetch('http://localhost:8000/api/v1/auth/me', {
+      const response = await fetch('https://ajebo-tailor-backend.onrender.com/api/v1/auth/me', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

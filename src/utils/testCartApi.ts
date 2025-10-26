@@ -90,7 +90,7 @@ export async function testGetCart(): Promise<void> {
 export async function testCartApiConnectivity(): Promise<void> {
   console.log('\n🔗 Testing Cart API Connectivity...\n');
   
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ajebo-tailor-backend.onrender.com';
   console.log(`API Base URL: ${API_BASE_URL}`);
   
   try {

@@ -87,7 +87,7 @@ export async function testSingleProduct(productId: string = '1'): Promise<void> 
 export async function testApiConnectivity(): Promise<void> {
   console.log('\n=== Testing API Connectivity ===');
   
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ajebo-tailor-backend.onrender.com';
   console.log(`API Base URL: ${API_BASE_URL}`);
   
   try {

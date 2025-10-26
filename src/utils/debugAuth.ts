@@ -24,7 +24,7 @@ export function debugAuthState(): void {
     }
   }
   
-  console.log('\n🌐 API Base URL:', process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
+  console.log('\n🌐 API Base URL:', process.env.NEXT_PUBLIC_API_URL || 'https://ajebo-tailor-backend.onrender.com');
   
   console.log('\n✨ Debug complete!\n');
 }

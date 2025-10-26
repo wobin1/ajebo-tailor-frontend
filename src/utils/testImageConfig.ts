@@ -7,7 +7,7 @@ export function testImageConfiguration(): void {
   
   const testUrls = [
     'https://example.com/suit1.jpg',
-    'http://localhost:8000/images/product1.jpg',
+    'https://ajebo-tailor-backend.onrender.com/images/product1.jpg',
     'https://images.unsplash.com/photo-123456',
     'https://via.placeholder.com/300x300',
     'https://s3.amazonaws.com/bucket/image.jpg',
@@ -15,7 +15,7 @@ export function testImageConfiguration(): void {
   
   console.log('✅ Next.js image configuration updated to allow:');
   console.log('  - example.com (HTTPS)');
-  console.log('  - localhost:8000 (HTTP)');
+  console.log('  - ajebo-tailor-backend.onrender.com (HTTPS)');
   console.log('  - *.amazonaws.com (HTTPS)');
   console.log('  - images.unsplash.com (HTTPS)');
   console.log('  - via.placeholder.com (HTTPS)');

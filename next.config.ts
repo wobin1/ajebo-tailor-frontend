@@ -10,9 +10,9 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
       {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '8000',
+        protocol: 'https',
+        hostname: 'ajebo-tailor-backend.onrender.com',
+        port: '',
         pathname: '/**',
       },
       {

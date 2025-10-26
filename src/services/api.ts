@@ -3,7 +3,7 @@ import { mockProducts, mockCategories, mockOrders, mockUsers } from '@/lib/mockD
 import { authApi } from './authApi';
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ajebo-tailor-backend.onrender.com';
 const API_V1_PREFIX = '/api/v1';
 
 // Simulate API delay for mock endpoints
